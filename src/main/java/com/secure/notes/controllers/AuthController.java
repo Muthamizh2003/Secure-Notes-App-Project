@@ -1,6 +1,5 @@
 package com.secure.notes.controllers;
 
-
 import com.secure.notes.models.AppRole;
 import com.secure.notes.models.Role;
 import com.secure.notes.models.User;
@@ -12,9 +11,12 @@ import com.secure.notes.security.request.SignupRequest;
 import com.secure.notes.security.response.LoginResponse;
 import com.secure.notes.security.response.MessageResponse;
 import com.secure.notes.security.response.UserInfoResponse;
+import com.secure.notes.security.services.UserDetailsImpl;
+import com.secure.notes.services.TotpService;
 import com.secure.notes.services.UserService;
+import com.secure.notes.util.AuthUtil;
+import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import jakarta.validation.Valid;
-import org.apache.catalina.webresources.JarWarResource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,13 +42,29 @@ import java.util.stream.Collectors;
 public class AuthController {
 
     @Autowired
-    UserService userService;
+    JwtUtils jwtUtils;
 
     @Autowired
     AuthenticationManager authenticationManager;
 
     @Autowired
-    JwtUtils jwtUtils;
+    UserRepository userRepository;
+
+    @Autowired
+    RoleRepository roleRepository;
+
+    @Autowired
+    PasswordEncoder encoder;
+
+    @Autowired
+    UserService userService;
+
+    @Autowired
+    AuthUtil authUtil;
+
+    @Autowired
+    TotpService totpService;
+
     @PostMapping("/public/signin")
     public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
         Authentication authentication;
@@ -60,10 +78,10 @@ public class AuthController {
             return new ResponseEntity<Object>(map, HttpStatus.NOT_FOUND);
         }
 
-//      set the authentication
+//      Set the authentication
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
 
         String jwtToken = jwtUtils.generateTokenFromUsername(userDetails);
 
@@ -73,20 +91,13 @@ public class AuthController {
                 .collect(Collectors.toList());
 
         // Prepare the response body, now including the JWT token directly in the body
-        LoginResponse response = new LoginResponse(userDetails.getUsername(), roles, jwtToken);
+        LoginResponse response = new LoginResponse(userDetails.getUsername(),
+                roles, jwtToken);
 
         // Return the response entity with the JWT token included in the response body
         return ResponseEntity.ok(response);
     }
 
-    @Autowired
-    UserRepository userRepository;
-
-    @Autowired
-    RoleRepository roleRepository;
-
-    @Autowired
-    PasswordEncoder encoder;
 
     @PostMapping("/public/signup")
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
@@ -134,6 +145,7 @@ public class AuthController {
         return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
     }
 
+
     @GetMapping("/user")
     public ResponseEntity<?> getUserDetails(@AuthenticationPrincipal UserDetails userDetails) {
         User user = userService.findByUsername(userDetails.getUsername());
@@ -159,24 +171,93 @@ public class AuthController {
         return ResponseEntity.ok().body(response);
     }
 
-
-    // AuthController.java
     @GetMapping("/username")
     public String currentUserName(@AuthenticationPrincipal UserDetails userDetails) {
         return (userDetails != null) ? userDetails.getUsername() : "";
     }
 
     @PostMapping("/public/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestParam String email){
-        try{
+    public ResponseEntity<?> forgotPassword(@RequestParam String email) {
+        try {
             userService.generatePasswordResetToken(email);
             return ResponseEntity.ok(new MessageResponse("Password reset email sent!"));
-        } catch (Exception e){
+        } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new MessageResponse("Error sending password reset email"));
         }
 
     }
 
+    @PostMapping("/public/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestParam String token,
+                                           @RequestParam String newPassword) {
+
+        try {
+            userService.resetPassword(token, newPassword);
+            return ResponseEntity.ok(new MessageResponse("Password reset successful"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    // 2FA Authentication
+    @PostMapping("/enable-2fa")
+    public ResponseEntity<String> enable2FA() {
+        Long userId = authUtil.loggedInUserId();
+        GoogleAuthenticatorKey secret = userService.generate2FASecret(userId);
+        String qrCodeUrl = totpService.getQrCodeUrl(secret,
+                userService.getUserById(userId).getUserName());
+        return ResponseEntity.ok(qrCodeUrl);
+    }
+
+    @PostMapping("/disable-2fa")
+    public ResponseEntity<String> disable2FA() {
+        Long userId = authUtil.loggedInUserId();
+        userService.disable2FA(userId);
+        return ResponseEntity.ok("2FA disabled");
+    }
+
+
+    @PostMapping("/verify-2fa")
+    public ResponseEntity<String> verify2FA(@RequestParam int code) {
+        Long userId = authUtil.loggedInUserId();
+        boolean isValid = userService.validate2FACode(userId, code);
+        if (isValid) {
+            userService.enable2FA(userId);
+            return ResponseEntity.ok("2FA Verified");
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Invalid 2FA Code");
+        }
+    }
+
+
+    @GetMapping("/user/2fa-status")
+    public ResponseEntity<?> get2FAStatus() {
+        User user = authUtil.loggedInUser();
+        if (user != null){
+            return ResponseEntity.ok().body(Map.of("is2faEnabled", user.isTwoFactorEnabled()));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("User not found");
+        }
+    }
+
+
+    @PostMapping("/public/verify-2fa-login")
+    public ResponseEntity<String> verify2FALogin(@RequestParam int code,
+                                                 @RequestParam String jwtToken) {
+        String username = jwtUtils.getUserNameFromJwtToken(jwtToken);
+        User user = userService.findByUsername(username);
+        boolean isValid = userService.validate2FACode(user.getUserId(), code);
+        if (isValid) {
+            return ResponseEntity.ok("2FA Verified");
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Invalid 2FA Code");
+        }
+    }
 
 }

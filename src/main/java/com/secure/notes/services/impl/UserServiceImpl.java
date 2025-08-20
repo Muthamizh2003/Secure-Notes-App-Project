@@ -8,8 +8,10 @@ import com.secure.notes.models.User;
 import com.secure.notes.repositories.PasswordResetTokenRepository;
 import com.secure.notes.repositories.RoleRepository;
 import com.secure.notes.repositories.UserRepository;
+import com.secure.notes.services.TotpService;
 import com.secure.notes.services.UserService;
 import com.secure.notes.util.EmailService;
+import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,13 +30,13 @@ public class UserServiceImpl implements UserService {
     String frontendUrl;
 
     @Autowired
+    PasswordEncoder passwordEncoder;
+
+    @Autowired
     UserRepository userRepository;
 
     @Autowired
     RoleRepository roleRepository;
-
-    @Autowired
-    PasswordEncoder passwordEncoder;
 
     @Autowired
     PasswordResetTokenRepository passwordResetTokenRepository;
@@ -42,9 +44,13 @@ public class UserServiceImpl implements UserService {
     @Autowired
     EmailService emailService;
 
+    @Autowired
+    TotpService totpService;
+
     @Override
     public void updateUserRole(Long userId, String roleName) {
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+        User user = userRepository.findById(userId).orElseThrow(()
+                -> new RuntimeException("User not found"));
         AppRole appRole = AppRole.valueOf(roleName);
         Role role = roleRepository.findByRoleName(appRole)
                 .orElseThrow(() -> new RuntimeException("Role not found"));
@@ -52,7 +58,6 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
     }
 
-    //@PreAuthorize("hasRole('ROLE_ADMIN')")
     @Override
     public List<User> getAllUsers() {
         return userRepository.findAll();
@@ -92,18 +97,6 @@ public class UserServiceImpl implements UserService {
         return user.orElseThrow(() -> new RuntimeException("User not found with username: " + username));
     }
 
-    @Override
-    public void updatePassword(Long userId, String password) {
-        try {
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("User not found"));
-            user.setPassword(passwordEncoder.encode(password));
-            userRepository.save(user);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to update password");
-        }
-    }
-
 
     @Override
     public void updateAccountLockStatus(Long userId, boolean lock) {
@@ -111,6 +104,12 @@ public class UserServiceImpl implements UserService {
                 -> new RuntimeException("User not found"));
         user.setAccountNonLocked(!lock);
         userRepository.save(user);
+    }
+
+
+    @Override
+    public List<Role> getAllRoles() {
+        return roleRepository.findAll();
     }
 
     @Override
@@ -137,12 +136,18 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
     }
 
+
     @Override
-    public List<Role> getAllRoles() {
-
-        return roleRepository.findAll();
+    public void updatePassword(Long userId, String password) {
+        try {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            user.setPassword(passwordEncoder.encode(password));
+            userRepository.save(user);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update password");
+        }
     }
-
 
     @Override
     public void generatePasswordResetToken(String email){
@@ -160,4 +165,67 @@ public class UserServiceImpl implements UserService {
     }
 
 
+    @Override
+    public void resetPassword(String token, String newPassword) {
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
+                .orElseThrow(() -> new RuntimeException("Invalid password reset token"));
+
+        if (resetToken.isUsed())
+            throw new RuntimeException("Password reset token has already been used");
+
+        if (resetToken.getExpiryDate().isBefore(Instant.now()))
+            throw new RuntimeException("Password reset token has expired");
+
+        User user = resetToken.getUser();
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+    }
+
+    @Override
+    public Optional<User> findByEmail(String email) {
+        return userRepository.findByEmail(email);
+    }
+
+    @Override
+    public User registerUser(User user){
+        if (user.getPassword() != null)
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        return userRepository.save(user);
+    }
+
+    @Override
+    public GoogleAuthenticatorKey generate2FASecret(Long userId){
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        GoogleAuthenticatorKey key = totpService.generateSecret();
+        user.setTwoFactorSecret(key.getKey());
+        userRepository.save(user);
+        return key;
+    }
+
+    @Override
+    public boolean validate2FACode(Long userId, int code){
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return totpService.verifyCode(user.getTwoFactorSecret(), code);
+    }
+
+    @Override
+    public void enable2FA(Long userId){
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setTwoFactorEnabled(true);
+        userRepository.save(user);
+    }
+
+    @Override
+    public void disable2FA(Long userId){
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setTwoFactorEnabled(false);
+        userRepository.save(user);
+    }
 }

@@ -1,6 +1,5 @@
 package com.secure.notes.security.services;
 
-
 import com.secure.notes.models.User;
 import com.secure.notes.repositories.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,9 +23,4 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
         return UserDetailsImpl.build(user);
     }
-
-
-
-
 }
-

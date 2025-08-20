@@ -18,13 +18,13 @@ public class AuditLogController {
     AuditLogService auditLogService;
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     public List<AuditLog> getAuditLogs(){
         return auditLogService.getAllAuditLogs();
     }
 
     @GetMapping("/note/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     public List<AuditLog> getNoteAuditLogs(@PathVariable Long id){
         return auditLogService.getAuditLogsForNoteId(id);
     }

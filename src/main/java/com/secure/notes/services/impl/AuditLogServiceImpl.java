@@ -15,7 +15,7 @@ public class AuditLogServiceImpl implements AuditLogService {
 
     @Autowired
     AuditLogRepository auditLogRepository;
-    
+
     @Override
     public void logNoteCreation(String username, Note note){
         AuditLog log = new AuditLog();
