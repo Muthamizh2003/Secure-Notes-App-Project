@@ -1,27 +1,70 @@
 Secure Notes App
 
-Secure Notes is a full-stack, privacy-focused note-taking application built using Spring Boot, React.js, MySQL, and AWS. The app provides end-to-end encryption to securely store your personal and professional notes.
+Secure Notes is a privacy-focused note-taking application built with Spring Boot, React.js, MySQL, and AWS. It provides end-to-end encryption, multi-factor authentication (MFA), and OAuth 2.0 login to securely store and manage your personal and professional notes.
+
+🔗 http://secure-notes-app-v1.s3-website.ap-south-1.amazonaws.com/
 
 Features
 
-Secure Storage: Notes are encrypted and safely stored in the database.
+Encrypted Notes: End-to-end encrypted notes stored securely in the database.
 
-User Authentication: Implemented with Spring Security for secure login and signup.
+User Authentication:
 
-Intuitive UI: React.js frontend for a smooth, responsive user experience.
+Secure login/signup with Spring Security
 
-Organized Notes: Categorize and search notes with ease.
+Multi-Factor Authentication (MFA) for added security
 
-Cloud Deployment: Hosted on AWS for reliability and scalability.
+OAuth 2.0 login (Google, GitHub) for easy access
+
+Organized & Searchable: Categorize and search notes efficiently.
+
+Responsive UI: Smooth, mobile-friendly interface built with React.js.
+
+Cloud-Ready: Hosted on AWS for reliability and scalability.
 
 Tech Stack
 
-Backend: Spring Boot, Spring Security, MySQL
+Frontend: React.js
 
-Frontend: React.js, Tailwind CSS (or your preferred styling)
+Backend: Spring Boot, Spring Security, OAuth 2.0
 
-Cloud: AWS (EC2/S3/RDS as applicable)
+Database: MySQL
 
-Secure Notes ensures your private data remains private while providing a seamless note-taking experience.
+Cloud/Hosting: AWS
 
-Please Note : i have problems while deploying please run on your local machine
+Quick Setup
+Backend
+cd backend
+# Configure MySQL and OAuth 2.0 client credentials in application.properties
+mvn spring-boot:run
+
+Frontend
+cd frontend
+npm install
+npm start
+
+API Endpoints (JWT Secured)
+
+POST /api/auth/signup → Signup
+
+POST /api/auth/login → Login
+
+POST /api/auth/mfa-verify → MFA verification
+
+POST /api/notes → Create note
+
+GET /api/notes → Get all notes
+
+PUT /api/notes/{id} → Update note
+
+DELETE /api/notes/{id} → Delete note
+
+OAuth 2.0 login endpoints are integrated for third-party authentication.
+
+Security Highlights
+
+MFA: Adds an extra layer of security via OTP or authenticator apps.
+
+OAuth 2.0: Allows users to log in securely using trusted providers.
+
+JWT Tokens: Secure API access with token-based authentication.
